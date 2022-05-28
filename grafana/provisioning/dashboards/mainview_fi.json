@@ -24,7 +24,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -44,12 +43,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
@@ -602,7 +597,7 @@
       },
       "targets": [
         {
-          "alias": "Total AC Output Power",
+          "alias": "Kokonaislähtöteho (AC)",
           "datasource": {
             "type": "influxdb",
             "uid": "P951FEA4DE68E13C5"
@@ -648,7 +643,7 @@
           ]
         },
         {
-          "alias": "Total Consumption Power",
+          "alias": "Kokonaiskulutusteho",
           "datasource": {
             "type": "influxdb",
             "uid": "P951FEA4DE68E13C5"
@@ -784,7 +779,7 @@
       },
       "targets": [
         {
-          "alias": "Temperature- Inverter",
+          "alias": "Lämpötila (Invertteri)",
           "datasource": {
             "type": "influxdb",
             "uid": "P951FEA4DE68E13C5"
@@ -830,7 +825,7 @@
           ]
         },
         {
-          "alias": "Module temperature1",
+          "alias": "Lämpötila (Moduuli)",
           "datasource": {
             "type": "influxdb",
             "uid": "P951FEA4DE68E13C5"
@@ -881,7 +876,7 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "30s",
+  "refresh": "",
   "schemaVersion": 36,
   "style": "dark",
   "tags": [],
@@ -895,7 +890,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "Päänäkymä",
-  "uid": "cDGyYS97k",
-  "version": 24,
+  "uid": "main_fi",
+  "version": 1,
   "weekStart": ""
 }
