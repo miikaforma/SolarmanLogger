@@ -645,7 +645,7 @@
                 "type": "field"
               }
             ]
-          ],
+          ]
         },
         {
           "alias": "Total Consumption Power",
@@ -692,7 +692,7 @@
                 "type": "field"
               }
             ]
-          ],
+          ]
         }
       ],
       "title": "Tuotto",
@@ -827,7 +827,7 @@
                 "type": "field"
               }
             ]
-          ],
+          ]
         },
         {
           "alias": "Module temperature1",
@@ -874,7 +874,7 @@
                 "type": "field"
               }
             ]
-          ],
+          ]
         }
       ],
       "title": "Lämpötilat",
