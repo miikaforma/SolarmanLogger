@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use chrono::TimeZone;
 use chrono::{NaiveDateTime, DateTime, Utc};
-use chrono_tz::Europe::Helsinki;
+// use chrono_tz::Europe::Helsinki;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,9 +27,10 @@ impl DataList {
         }
         // println!("System Time EEST {}", naive_time);
 
-        Some(Utc.from_utc_datetime(&Helsinki.from_local_datetime(&naive_time.unwrap())
-            .unwrap()
-            .naive_utc()))
+        Some(Utc.from_utc_datetime(&naive_time.unwrap()))
+        // Some(Utc.from_utc_datetime(&Helsinki.from_local_datetime(&naive_time.unwrap())
+        //     .unwrap()
+        //     .naive_utc()))
     }
 
     pub fn to_string(&self) -> Option<String> {
