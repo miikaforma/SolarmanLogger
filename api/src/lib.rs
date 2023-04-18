@@ -1,12 +1,20 @@
+#[macro_use]
+extern crate log;
+
 pub mod models;
 
 use http::{StatusCode, header::USER_AGENT, header::AUTHORIZATION};
 use dotenv::dotenv;
+use lazy_static::lazy_static;
 pub use models::*;
+
+lazy_static! {
+    static ref SOLARMAN_HOST: String = dotenv::var("SOLARMAN_HOST").unwrap_or_else(|_| "https://globalapi.solarmanpv.com".to_string());
+}
 
 pub async fn access_token(app_id: u64, app_secret: String, email: String, password: String) -> Result<TokenResponse, anyhow::Error> {
     let res = reqwest::Client::new()
-        .post(format!("https://api.solarmanpv.com/account/v1.0/token?appId={}&language=en", app_id))
+        .post(format!("{}/account/v1.0/token?appId={}&language=en", SOLARMAN_HOST.to_string(), app_id))
         .json(&TokenRequest {
             app_secret,
             email,
@@ -40,7 +48,7 @@ pub async fn current_data(access_token: String, device_sn: String, device_id: St
 
 pub async fn current_data_with_lang(access_token: String, device_sn: String, device_id: String, lang: String) -> Result<CurrentDataResponse, anyhow::Error> {
     let res = reqwest::Client::new()
-        .post(format!("https://api.solarmanpv.com/device/v1.0/currentData?language={}", lang))
+        .post(format!("{}/device/v1.0/currentData?language={}", SOLARMAN_HOST.to_string(), lang))
         .json(&CurrentDataRequest {
             device_sn,
             device_id,
@@ -73,7 +81,7 @@ pub async fn historical_data(access_token: String, device_sn: String, device_id:
 
 pub async fn historical_data_with_lang(access_token: String, device_sn: String, device_id: String, start_time: String, end_time: String, lang: String) -> Result<HistoricalDataResponse, anyhow::Error> {
     let res = reqwest::Client::new()
-        .post(format!("https://api.solarmanpv.com/device/v1.0/historical?language={}", lang))
+        .post(format!("{}/device/v1.0/historical?language={}", SOLARMAN_HOST.to_string(), lang))
         .json(&HistoricalDataRequest {
             device_sn,
             device_id,

@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 use std::time::Duration;
 
 use api::CurrentDataResponse;
@@ -9,6 +12,9 @@ use dotenv::dotenv;
 use influxdb::Client;
 use influxdb::InfluxDbWriteable;
 use tokio::time::sleep;
+use chrono_tz::Tz;
+
+mod logging;
 
 #[derive(InfluxDbWriteable)]
 #[allow(non_snake_case)]
@@ -64,7 +70,7 @@ struct CurrentData {
 
 
 async fn fetch_historical_data(client: &Client, access_token: String, device_sn: String, device_id: String, start_time: String, end_time: String) {
-    println!("Fetching historical data for {} between {} - {}", &device_sn, &start_time, &end_time);
+    info!("Fetching historical data for {} between {} - {}", &device_sn, &start_time, &end_time);
 
     match historical_data(access_token, device_sn, device_id, start_time, end_time).await {
         Ok(data) => {
@@ -76,10 +82,10 @@ async fn fetch_historical_data(client: &Client, access_token: String, device_sn:
                 if status.value.as_ref().unwrap_or(&"".to_string()).contains("Standby") {
                     device_state = 3;
                 }
-                
-                log_new_entry(client, &CurrentDataResponse { 
-                    code: None, 
-                    msg: None, 
+
+                log_new_entry(client, &CurrentDataResponse {
+                    code: None,
+                    msg: None,
                     success: data.success,
                     request_id: data.request_id.clone(),
                     device_sn: data.device_sn.clone(),
@@ -95,7 +101,7 @@ async fn fetch_historical_data(client: &Client, access_token: String, device_sn:
 }
 
 async fn fetch_and_log_new_entry(client: &Client, access_token: String, device_sn: String, device_id: String) {
-    println!("Logging new entry for device {}", &device_sn);
+    info!("Logging new entry for device {}", &device_sn);
 
     match current_data(access_token, device_sn, device_id).await {
         Ok(data) => {
@@ -110,18 +116,18 @@ async fn log_new_entry(client: &Client, data: &CurrentDataResponse) {
     let system_time = iter.find(| &x| x.key == "SYSTIM1");
 
     if system_time.is_none() {
-        println!("Skipping logging because system time couldn't be found");
+        warn!("Skipping logging because system time couldn't be found");
         return;
     }
 
     let system_time = system_time.unwrap().to_utc_datetime();
     if system_time.is_none() {
-        println!("Skipping logging because system time couldn't be parsed");
+        warn!("Skipping logging because system time couldn't be parsed");
         return;
     }
 
     let system_time = system_time.unwrap();
-    println!("System Time UTC: {:?}", system_time);
+    info!("System Time UTC: {:?}", system_time);
     let mut current_data = CurrentData {
         time: system_time,
 
@@ -237,7 +243,7 @@ async fn log_new_entry(client: &Client, data: &CurrentDataResponse) {
 }
 
 async fn get_access_token(app_id: u64, app_secret: String, email: String, password: String) -> String {
-    println!("Fetching a new access_token for app {}", &app_id);
+    info!("Fetching a new access_token for app {}", &app_id);
 
     match access_token(app_id, app_secret, email, password).await {
         Ok(data) => {
@@ -251,9 +257,19 @@ async fn get_access_token(app_id: u64, app_secret: String, email: String, passwo
     }
 }
 
+fn get_timezone() -> Tz {
+    let timezone = dotenv::var("CHRONO_TIMEZONE").unwrap_or("Europe/Helsinki".to_string());
+    timezone.parse().unwrap()
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
+
+    logging::init_logging();
+
+    info!("SolarmanLogger starting");
+    info!("Using time zone: {}", get_timezone().name());
 
     let database_url = dotenv::var("DATABASE_URL").unwrap_or("http://localhost:8086".to_string());
     let database_name = dotenv::var("DATABASE_NAME").unwrap_or("solarman".to_string());
@@ -269,7 +285,7 @@ async fn main() {
         .map(|var| var.parse::<u64>())
         .unwrap_or(Ok(0))
         .unwrap();
-    
+
     let device_sn = dotenv::var("DEVICE_SN").unwrap();
     let device_id = dotenv::var("DEVICE_ID").unwrap();
 
@@ -296,7 +312,7 @@ async fn main() {
         let duration = naive_end_time.signed_duration_since(naive_start_time).num_days();
         for n in 0..duration + 1 {
             let dt = naive_start_time + chrono::Duration::days(n);
-        
+
             fetch_historical_data(&client, access_token.to_string(), device_sn.clone(), device_id.clone(), dt.format("%Y-%m-%d").to_string(), dt.format("%Y-%m-%d").to_string()).await;
         }
     }

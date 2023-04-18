@@ -16,3 +16,7 @@ dotenv = "0.15.0"
 anyhow = { version = "1.0" }
 
 api = { path = "../api" }
+
+# Logging
+log = "0.4"
+flexi_logger = { version = "0.17", features = ["colors"] }

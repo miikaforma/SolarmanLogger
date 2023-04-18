@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use chrono::TimeZone;
 use chrono::{NaiveDateTime, DateTime, Utc};
 // use chrono_tz::Europe::Helsinki;
+use chrono_tz::Tz;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +21,11 @@ pub struct DataList {
 }
 
 impl DataList {
+    fn get_timezone() -> Tz {
+        let timezone = dotenv::var("CHRONO_TIMEZONE").unwrap_or("Europe/Helsinki".to_string());
+        timezone.parse().unwrap()
+    }
+
     pub fn to_utc_datetime(&self) -> Option<DateTime<Utc>> {
         let naive_time = NaiveDateTime::parse_from_str(&self.value.as_ref().unwrap(), "%y-%m-%d %H:%M:%S");
         if naive_time.is_err() {
@@ -27,15 +33,15 @@ impl DataList {
         }
         // println!("System Time EEST {}", naive_time);
 
-        Some(Utc.from_utc_datetime(&naive_time.unwrap()))
-        // Some(Utc.from_utc_datetime(&Helsinki.from_local_datetime(&naive_time.unwrap())
-        //     .unwrap()
-        //     .naive_utc()))
+        // Some(Utc.from_utc_datetime(&naive_time.unwrap()))
+        Some(Utc.from_utc_datetime(&DataList::get_timezone().from_local_datetime(&naive_time.unwrap())
+            .unwrap()
+            .naive_utc()))
     }
 
     pub fn to_string(&self) -> Option<String> {
         if self.value.is_none() {
-            println!("Tried to convert none value to String for key {}", self.key);
+            warn!("Tried to convert none value to String for key {}", self.key);
             None
         }
         else {
@@ -45,7 +51,7 @@ impl DataList {
                 Some(val)
             }
             else {
-                println!("Parsing key {} to String failed", self.key);
+                error!("Parsing key {} to String failed", self.key);
                 None
             }
         }
@@ -54,7 +60,7 @@ impl DataList {
 
     pub fn to_float(&self) -> Option<f32> {
         if self.value.is_none() {
-            println!("Tried to convert none value to float for key {}", self.key);
+            warn!("Tried to convert none value to float for key {}", self.key);
             None
         }
         else {
@@ -64,7 +70,7 @@ impl DataList {
                 Some(val)
             }
             else {
-                println!("Parsing key {} to float failed", self.key);
+                error!("Parsing key {} to float failed", self.key);
                 None
             }
         }
@@ -72,7 +78,7 @@ impl DataList {
 
     pub fn to_u32(&self) -> Option<u32> {
         if self.value.is_none() {
-            println!("Tried to convert none value to u32 for key {}", self.key);
+            warn!("Tried to convert none value to u32 for key {}", self.key);
             None
         }
         else {
@@ -82,7 +88,7 @@ impl DataList {
                 Some(val)
             }
             else {
-                println!("Parsing key {} to u32 failed", self.key);
+                error!("Parsing key {} to u32 failed", self.key);
                 None
             }
         }
@@ -90,7 +96,7 @@ impl DataList {
 
     pub fn to_u16(&self) -> Option<u16> {
         if self.value.is_none() {
-            println!("Tried to convert none value to u16 for key {}", self.key);
+            warn!("Tried to convert none value to u16 for key {}", self.key);
             None
         }
         else {
@@ -100,7 +106,7 @@ impl DataList {
                 Some(val)
             }
             else {
-                println!("Parsing key {} to u16 failed", self.key);
+                error!("Parsing key {} to u16 failed", self.key);
                 None
             }
         }
@@ -108,7 +114,7 @@ impl DataList {
 
     pub fn to_u8(&self) -> Option<u8> {
         if self.value.is_none() {
-            println!("Tried to convert none value to u8 for key {}", self.key);
+            warn!("Tried to convert none value to u8 for key {}", self.key);
             None
         }
         else {
@@ -118,7 +124,7 @@ impl DataList {
                 Some(val)
             }
             else {
-                println!("Parsing key {} to u8 failed", self.key);
+                error!("Parsing key {} to u8 failed", self.key);
                 None
             }
         }
