@@ -1,3 +1,5 @@
+use core::time;
+
 use serde::{Deserialize, Serialize};
 use chrono::TimeZone;
 use chrono::{NaiveDateTime, DateTime, Utc};
@@ -142,7 +144,15 @@ pub struct CurrentDataResponse {
     pub device_id: u32,
     pub device_type: String,
     pub device_state: u8,
+    pub collection_time: i64,
     pub data_list: Vec<DataList>,
+}
+
+impl CurrentDataResponse {
+    pub fn collection_time_as_utc(&self) -> DateTime<Utc> {
+        let naive_datetime = NaiveDateTime::from_timestamp(self.collection_time, 0);
+        DateTime::<Utc>::from_utc(naive_datetime, Utc)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -174,6 +184,28 @@ pub struct HistoricalDataResponse {
 pub struct ParamDataList {
     pub collect_time: String,
     pub data_list: Vec<DataList>,
+}
+
+impl ParamDataList {
+    pub fn collect_time_as_i64(&self) -> i64 {
+        let timestamp = self.collect_time.parse::<i64>();
+        if timestamp.is_err() {
+            return 0;
+        }
+
+        timestamp.unwrap()
+    }
+
+    pub fn collect_time_as_utc(&self) -> DateTime<Utc> {
+        let timestamp = self.collect_time.parse::<i64>();
+        if timestamp.is_err() {
+            let naive_datetime = NaiveDateTime::from_timestamp(0, 0);
+            return DateTime::<Utc>::from_utc(naive_datetime, Utc);
+        }
+
+        let naive_datetime = NaiveDateTime::from_timestamp(timestamp.unwrap(), 0);
+        DateTime::<Utc>::from_utc(naive_datetime, Utc)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

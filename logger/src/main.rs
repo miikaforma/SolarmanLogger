@@ -3,16 +3,16 @@ extern crate log;
 
 use std::time::Duration;
 
-use api::CurrentDataResponse;
 use api::access_token;
 use api::current_data;
 use api::historical_data;
-use chrono::{NaiveDate, DateTime, Utc};
+use api::CurrentDataResponse;
+use chrono::{DateTime, NaiveDate, Utc};
+use chrono_tz::Tz;
 use dotenv::dotenv;
 use influxdb::Client;
 use influxdb::InfluxDbWriteable;
 use tokio::time::sleep;
-use chrono_tz::Tz;
 
 mod logging;
 
@@ -68,52 +68,73 @@ struct CurrentData {
     N_I2: Option<f32>,
 }
 
-
-async fn fetch_historical_data(client: &Client, access_token: String, device_sn: String, device_id: String, start_time: String, end_time: String) {
-    info!("Fetching historical data for {} between {} - {}", &device_sn, &start_time, &end_time);
+async fn fetch_historical_data(
+    client: &Client,
+    access_token: String,
+    device_sn: String,
+    device_id: String,
+    start_time: String,
+    end_time: String,
+) {
+    info!(
+        "Fetching historical data for {} between {} - {}",
+        &device_sn, &start_time, &end_time
+    );
 
     match historical_data(access_token, device_sn, device_id, start_time, end_time).await {
         Ok(data) => {
             for param_data_list in data.param_data_list.iter() {
-
                 let mut device_state = 1;
                 let mut iter = param_data_list.data_list.iter();
-                let status = iter.find(| &x| x.key == "INV_ST1").unwrap();
-                if status.value.as_ref().unwrap_or(&"".to_string()).contains("Standby") {
+                let status = iter.find(|&x| x.key == "INV_ST1").unwrap();
+                if status
+                    .value
+                    .as_ref()
+                    .unwrap_or(&"".to_string())
+                    .contains("Standby")
+                {
                     device_state = 3;
                 }
 
-                log_new_entry(client, &CurrentDataResponse {
-                    code: None,
-                    msg: None,
-                    success: data.success,
-                    request_id: data.request_id.clone(),
-                    device_sn: data.device_sn.clone(),
-                    device_id: data.device_id,
-                    device_type: data.device_type.clone(),
-                    device_state: device_state,
-                    data_list: param_data_list.data_list.clone(),
-                }).await
+                log_new_entry(
+                    client,
+                    &CurrentDataResponse {
+                        code: None,
+                        msg: None,
+                        success: data.success,
+                        request_id: data.request_id.clone(),
+                        device_sn: data.device_sn.clone(),
+                        device_id: data.device_id,
+                        device_type: data.device_type.clone(),
+                        device_state: device_state,
+                        collection_time: param_data_list.collect_time_as_i64(),
+                        data_list: param_data_list.data_list.clone(),
+                    },
+                )
+                .await
             }
         }
         Err(_) => {}
     }
 }
 
-async fn fetch_and_log_new_entry(client: &Client, access_token: String, device_sn: String, device_id: String) {
+async fn fetch_and_log_new_entry(
+    client: &Client,
+    access_token: String,
+    device_sn: String,
+    device_id: String,
+) {
     info!("Logging new entry for device {}", &device_sn);
 
     match current_data(access_token, device_sn, device_id).await {
-        Ok(data) => {
-            log_new_entry(client, &data).await
-        }
+        Ok(data) => log_new_entry(client, &data).await,
         Err(_) => {}
     }
 }
 
 async fn log_new_entry(client: &Client, data: &CurrentDataResponse) {
     let mut iter = data.data_list.iter();
-    let system_time = iter.find(| &x| x.key == "SYSTIM1");
+    let system_time = iter.find(|&x| x.key == "SYSTIM1");
 
     if system_time.is_none() {
         warn!("Skipping logging because system time couldn't be found");
@@ -126,10 +147,25 @@ async fn log_new_entry(client: &Client, data: &CurrentDataResponse) {
         return;
     }
 
+    let use_collection_time: bool = dotenv::var("USE_COLLECTION_TIME")
+        .map(|var| var.parse::<bool>())
+        .unwrap_or(Ok(false))
+        .unwrap();
+
     let system_time = system_time.unwrap();
-    info!("System Time UTC: {:?}", system_time);
+    let collection_time = data.collection_time_as_utc();
+
+    info!(
+        "System Time UTC: {:?} | CollectTime: {:?}",
+        system_time, collection_time
+    );
+    let time = if use_collection_time {
+        collection_time
+    } else {
+        system_time
+    };
     let mut current_data = CurrentData {
-        time: system_time,
+        time: time,
 
         device_sn: data.device_sn.clone(),
         device_id: data.device_id,
@@ -190,48 +226,124 @@ async fn log_new_entry(client: &Client, data: &CurrentDataResponse) {
                 current_data.SS_CY1 = data_list.to_u16();
                 // println!("Production Compliance Country: {:?}", current_data.SS_CY1);
             }
-            "MODEi1" => { current_data.MODEi1 = data_list.to_u8(); }
-            "HWv1" => { current_data.HWv1 = data_list.to_string(); }
-            "SWmai_v1" => { current_data.SWmai_v1 = data_list.to_string(); }
-            "DSPv1" => { current_data.DSPv1 = data_list.to_string(); }
-            "DSPv2" => { current_data.DSPv2 = data_list.to_string(); }
-            "FUSE_V" => { current_data.FUSE_V = data_list.to_string(); }
-            "DV1" => { current_data.DV1 = data_list.to_float(); }
-            "DV2" => { current_data.DV2 = data_list.to_float(); }
-            "DC1" => { current_data.DC1 = data_list.to_float(); }
-            "DC2" => { current_data.DC2 = data_list.to_float(); }
-            "DP1" => { current_data.DP1 = data_list.to_float(); }
-            "DP2" => { current_data.DP2 = data_list.to_float(); }
-            "AV1" => { current_data.AV1 = data_list.to_float(); }
-            "AV2" => { current_data.AV2 = data_list.to_float(); }
-            "AV3" => { current_data.AV3 = data_list.to_float(); }
-            "AC1" => { current_data.AC1 = data_list.to_float(); }
-            "AC2" => { current_data.AC2 = data_list.to_float(); }
-            "AC3" => { current_data.AC3 = data_list.to_float(); }
-            "A_Fo1" => { current_data.A_Fo1 = data_list.to_float(); }
-            "APo_t1" => { current_data.APo_t1 = data_list.to_float(); }
-            "Et_ge0" => { current_data.Et_ge0 = data_list.to_float(); }
-            "Etdy_ge1" => { current_data.Etdy_ge1 = data_list.to_float(); }
-            "ST_PG1" => { current_data.ST_PG1 = data_list.to_string(); }
-            "PG_Pt1" => { current_data.PG_Pt1 = data_list.to_float(); }
+            "MODEi1" => {
+                current_data.MODEi1 = data_list.to_u8();
+            }
+            "HWv1" => {
+                current_data.HWv1 = data_list.to_string();
+            }
+            "SWmai_v1" => {
+                current_data.SWmai_v1 = data_list.to_string();
+            }
+            "DSPv1" => {
+                current_data.DSPv1 = data_list.to_string();
+            }
+            "DSPv2" => {
+                current_data.DSPv2 = data_list.to_string();
+            }
+            "FUSE_V" => {
+                current_data.FUSE_V = data_list.to_string();
+            }
+            "DV1" => {
+                current_data.DV1 = data_list.to_float();
+            }
+            "DV2" => {
+                current_data.DV2 = data_list.to_float();
+            }
+            "DC1" => {
+                current_data.DC1 = data_list.to_float();
+            }
+            "DC2" => {
+                current_data.DC2 = data_list.to_float();
+            }
+            "DP1" => {
+                current_data.DP1 = data_list.to_float();
+            }
+            "DP2" => {
+                current_data.DP2 = data_list.to_float();
+            }
+            "AV1" => {
+                current_data.AV1 = data_list.to_float();
+            }
+            "AV2" => {
+                current_data.AV2 = data_list.to_float();
+            }
+            "AV3" => {
+                current_data.AV3 = data_list.to_float();
+            }
+            "AC1" => {
+                current_data.AC1 = data_list.to_float();
+            }
+            "AC2" => {
+                current_data.AC2 = data_list.to_float();
+            }
+            "AC3" => {
+                current_data.AC3 = data_list.to_float();
+            }
+            "A_Fo1" => {
+                current_data.A_Fo1 = data_list.to_float();
+            }
+            "APo_t1" => {
+                current_data.APo_t1 = data_list.to_float();
+            }
+            "Et_ge0" => {
+                current_data.Et_ge0 = data_list.to_float();
+            }
+            "Etdy_ge1" => {
+                current_data.Etdy_ge1 = data_list.to_float();
+            }
+            "ST_PG1" => {
+                current_data.ST_PG1 = data_list.to_string();
+            }
+            "PG_Pt1" => {
+                current_data.PG_Pt1 = data_list.to_float();
+            }
             "E_Puse_t1" => {
                 current_data.E_Puse_t1 = data_list.to_float();
                 // println!("Total Consumption Power: {:?}", current_data.E_Puse_t1);
             }
-            "INV_T0" => { current_data.INV_T0 = data_list.to_float(); }
-            "T_MDU1" => { current_data.T_MDU1 = data_list.to_float(); }
-            "SYSTIM1" => { current_data.SYSTIM1 = data_list.to_string(); }
-            "t_w_hou1" => { current_data.t_w_hou1 = data_list.to_u32(); }
-            "CD_TIM1" => { current_data.CD_TIM1 = data_list.to_u32(); }
-            "Bus_V1" => { current_data.Bus_V1 = data_list.to_float(); }
-            "Dcp1" => { current_data.Dcp1 = data_list.to_float(); }
-            "Dcp2" => { current_data.Dcp2 = data_list.to_float(); }
-            "Dcp3" => { current_data.Dcp3 = data_list.to_float(); }
-            "EAR_N_Ineg1" => { current_data.EAR_N_Ineg1 = data_list.to_float(); }
-            "CT_P1" => { current_data.CT_P1 = data_list.to_float(); }
-            "INV_ST1" => { current_data.INV_ST1 = data_list.to_string(); }
-            "N_I1" => { current_data.N_I1 = data_list.to_float(); }
-            "N_I2" => { current_data.N_I2 = data_list.to_float(); }
+            "INV_T0" => {
+                current_data.INV_T0 = data_list.to_float();
+            }
+            "T_MDU1" => {
+                current_data.T_MDU1 = data_list.to_float();
+            }
+            "SYSTIM1" => {
+                current_data.SYSTIM1 = data_list.to_string();
+            }
+            "t_w_hou1" => {
+                current_data.t_w_hou1 = data_list.to_u32();
+            }
+            "CD_TIM1" => {
+                current_data.CD_TIM1 = data_list.to_u32();
+            }
+            "Bus_V1" => {
+                current_data.Bus_V1 = data_list.to_float();
+            }
+            "Dcp1" => {
+                current_data.Dcp1 = data_list.to_float();
+            }
+            "Dcp2" => {
+                current_data.Dcp2 = data_list.to_float();
+            }
+            "Dcp3" => {
+                current_data.Dcp3 = data_list.to_float();
+            }
+            "EAR_N_Ineg1" => {
+                current_data.EAR_N_Ineg1 = data_list.to_float();
+            }
+            "CT_P1" => {
+                current_data.CT_P1 = data_list.to_float();
+            }
+            "INV_ST1" => {
+                current_data.INV_ST1 = data_list.to_string();
+            }
+            "N_I1" => {
+                current_data.N_I1 = data_list.to_float();
+            }
+            "N_I2" => {
+                current_data.N_I2 = data_list.to_float();
+            }
             _ => {}
         }
     }
@@ -242,18 +354,27 @@ async fn log_new_entry(client: &Client, data: &CurrentDataResponse) {
     }
 }
 
-async fn get_access_token(app_id: u64, app_secret: String, email: String, password: String) -> String {
+async fn get_access_token(
+    app_id: u64,
+    app_secret: String,
+    email: String,
+    password: String,
+) -> String {
     info!("Fetching a new access_token for app {}", &app_id);
 
     match access_token(app_id, app_secret, email, password).await {
         Ok(data) => {
             if !data.success {
-                panic!("Error fetching a new token {} - {}", data.code.unwrap_or("".to_string()), data.msg.unwrap_or("".to_string()));
+                panic!(
+                    "Error fetching a new token {} - {}",
+                    data.code.unwrap_or("".to_string()),
+                    data.msg.unwrap_or("".to_string())
+                );
             }
 
             data.access_token.unwrap()
         }
-        Err(err) => panic!("Token fetch request failed {}", err)
+        Err(err) => panic!("Token fetch request failed {}", err),
     }
 }
 
@@ -298,28 +419,42 @@ async fn main() {
     let client = Client::new(database_url, database_name);
 
     // Get auth token
-    let access_token = get_access_token(app_id, app_secret, email, password)
-        .await;
+    let access_token = get_access_token(app_id, app_secret, email, password).await;
 
-    if insert_historical_data
-    {
+    if insert_historical_data {
         let start_time = dotenv::var("START_TIME").unwrap();
         let end_time = dotenv::var("END_TIME").unwrap();
 
         let naive_start_time = NaiveDate::parse_from_str(&start_time, "%Y-%m-%d").unwrap();
         let naive_end_time = NaiveDate::parse_from_str(&end_time, "%Y-%m-%d").unwrap();
 
-        let duration = naive_end_time.signed_duration_since(naive_start_time).num_days();
+        let duration = naive_end_time
+            .signed_duration_since(naive_start_time)
+            .num_days();
         for n in 0..duration + 1 {
             let dt = naive_start_time + chrono::Duration::days(n);
 
-            fetch_historical_data(&client, access_token.to_string(), device_sn.clone(), device_id.clone(), dt.format("%Y-%m-%d").to_string(), dt.format("%Y-%m-%d").to_string()).await;
+            fetch_historical_data(
+                &client,
+                access_token.to_string(),
+                device_sn.clone(),
+                device_id.clone(),
+                dt.format("%Y-%m-%d").to_string(),
+                dt.format("%Y-%m-%d").to_string(),
+            )
+            .await;
         }
     }
 
     // println!("Starting fetch loop for current data for {} with the interval of {}", &device_sn, interval);
     loop {
-        fetch_and_log_new_entry(&client, access_token.to_string(), device_sn.clone(), device_id.clone()).await;
+        fetch_and_log_new_entry(
+            &client,
+            access_token.to_string(),
+            device_sn.clone(),
+            device_id.clone(),
+        )
+        .await;
         sleep(Duration::from_millis(interval)).await;
     }
 }
